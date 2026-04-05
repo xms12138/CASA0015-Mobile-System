@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'main_scaffold.dart';
 
 class TripHistoryPage extends StatelessWidget {
   const TripHistoryPage({super.key});
@@ -68,7 +69,9 @@ class TripHistoryPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   FilledButton.icon(
-                    onPressed: () {},
+                    onPressed: () {
+                      MainScaffold.of(context)?.switchToTab(1);
+                    },
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('Record your first journey'),
                   ),

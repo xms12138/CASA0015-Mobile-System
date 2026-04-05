@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'main_scaffold.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -169,8 +170,7 @@ class _StartRecordingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Navigate to Record tab (index 1) via MainScaffold
-        // Will be wired up properly in Phase 3
+        MainScaffold.of(context)?.switchToTab(1);
       },
       child: Container(
         width: double.infinity,

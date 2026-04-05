@@ -6,12 +6,21 @@ import 'trip_history_page.dart';
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
 
+  // Allow child widgets to switch tabs
+  static MainScaffoldState? of(BuildContext context) {
+    return context.findAncestorStateOfType<MainScaffoldState>();
+  }
+
   @override
-  State<MainScaffold> createState() => _MainScaffoldState();
+  State<MainScaffold> createState() => MainScaffoldState();
 }
 
-class _MainScaffoldState extends State<MainScaffold> {
+class MainScaffoldState extends State<MainScaffold> {
   int _selectedIndex = 0;
+
+  void switchToTab(int index) {
+    setState(() => _selectedIndex = index);
+  }
 
   // Keep pages alive when switching tabs
   static const List<Widget> _pages = [
