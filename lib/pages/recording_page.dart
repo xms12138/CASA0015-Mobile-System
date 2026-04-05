@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../services/location_service.dart';
+import '../services/camera_service.dart';
 import '../models/trip.dart';
 
 enum RecordingStatus { idle, recording, paused }
@@ -16,9 +20,12 @@ class RecordingPage extends StatefulWidget {
 class _RecordingPageState extends State<RecordingPage> {
   GoogleMapController? _mapController;
   final LocationService _locationService = LocationService();
+  final CameraService _cameraService = CameraService();
+  final Uuid _uuid = const Uuid();
 
   RecordingStatus _status = RecordingStatus.idle;
   List<TrackPoint> _trackPoints = [];
+  final List<PhotoMarker> _photos = [];
   StreamSubscription? _trackSubscription;
   StreamSubscription? _positionSubscription;
 
@@ -97,9 +104,12 @@ class _RecordingPageState extends State<RecordingPage> {
     _positionSubscription?.cancel();
     _timer?.cancel();
 
+    final photoCount = _photos.length;
+
     setState(() {
       _status = RecordingStatus.idle;
       _trackPoints = [];
+      _photos.clear();
       _elapsed = Duration.zero;
     });
 
@@ -107,11 +117,63 @@ class _RecordingPageState extends State<RecordingPage> {
     if (points.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Journey recorded: ${points.length} points'),
+          content: Text('Journey recorded: ${points.length} points, $photoCount photos'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
+  }
+
+  Future<void> _takePhoto() async {
+    // Use gallery on web/desktop, camera on mobile
+    final String? path = kIsWeb
+        ? await _cameraService.pickFromGallery()
+        : await _cameraService.takePhoto();
+
+    if (path == null || !mounted) return;
+
+    final position = _currentPosition ?? _defaultPosition;
+    final photo = PhotoMarker(
+      id: _uuid.v4(),
+      localPath: path,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      timestamp: DateTime.now(),
+    );
+
+    setState(() => _photos.add(photo));
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Photo added (${_photos.length} total)'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  // Show full photo in a bottom sheet when marker is tapped
+  void _showPhotoPreview(PhotoMarker photo) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _PhotoPreviewSheet(photo: photo),
+    );
+  }
+
+  // Build map markers from photos
+  Set<Marker> _buildPhotoMarkers() {
+    return _photos.map((photo) {
+      return Marker(
+        markerId: MarkerId(photo.id),
+        position: LatLng(photo.latitude, photo.longitude),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        onTap: () => _showPhotoPreview(photo),
+      );
+    }).toSet();
   }
 
   String _formatDuration(Duration d) {
@@ -155,6 +217,8 @@ class _RecordingPageState extends State<RecordingPage> {
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
+            // Photo markers on map
+            markers: _buildPhotoMarkers(),
             // Draw the route polyline
             polylines: _trackPoints.length >= 2
                 ? {
@@ -188,6 +252,19 @@ class _RecordingPageState extends State<RecordingPage> {
               ),
             ),
           ),
+
+          // Camera button (only visible during recording)
+          if (_status != RecordingStatus.idle)
+            Positioned(
+              right: 16,
+              bottom: 200,
+              child: FloatingActionButton(
+                heroTag: 'camera',
+                onPressed: _takePhoto,
+                backgroundColor: colorScheme.surface,
+                child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+              ),
+            ),
 
           // Re-center button
           Positioned(
@@ -466,6 +543,81 @@ class _CircleButton extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Bottom sheet for previewing a photo when its marker is tapped
+class _PhotoPreviewSheet extends StatelessWidget {
+  final PhotoMarker photo;
+
+  const _PhotoPreviewSheet({required this.photo});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Photo
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: kIsWeb
+                        ? Image.network(photo.localPath, fit: BoxFit.contain)
+                        : Image.file(File(photo.localPath), fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+              // Photo info
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on, size: 16, color: colorScheme.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${photo.latitude.toStringAsFixed(4)}, ${photo.longitude.toStringAsFixed(4)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    Icon(Icons.access_time, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${photo.timestamp.hour.toString().padLeft(2, '0')}:${photo.timestamp.minute.toString().padLeft(2, '0')}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
