@@ -48,3 +48,6 @@ CLAUDE.md
 .claude/
 PLAN.md
 DEVLOG.md
+
+# Local API keys (dart-define-from-file). See env.example.json.
+env.json

@@ -7,10 +7,16 @@ class AppConstants {
   static const String dbName = 'travel_trace.db';
   static const int dbVersion = 1;
 
-  // API placeholders (replace with real keys)
-  static const String openWeatherApiKey = 'bb650054e9a596e9e4907cfab1e3bdca';
-  static const String googleMapsApiKey =
-      'AIzaSyA3tq9GYy61HfQT0Ob4MrBLIAXiKjRIBx0';
+  // Injected at build time via --dart-define-from-file=env.json.
+  // Copy env.example.json to env.json and fill in your keys.
+  static const String openWeatherApiKey = String.fromEnvironment(
+    'OPENWEATHER_API_KEY',
+    defaultValue: '',
+  );
+  static const String googleMapsApiKey = String.fromEnvironment(
+    'GOOGLE_MAPS_API_KEY',
+    defaultValue: '',
+  );
 
   // GPS tracking interval in milliseconds
   static const int gpsIntervalMs = 3000;
