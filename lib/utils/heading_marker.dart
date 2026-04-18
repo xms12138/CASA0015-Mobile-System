@@ -26,7 +26,10 @@ Future<BitmapDescriptor> buildHeadingMarker({
   canvas.drawCircle(center, radius + 3, Paint()..color = Colors.white);
   canvas.drawCircle(center, radius, Paint()..color = dotColor);
 
-  final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+  final image = await recorder.endRecording().toImage(
+    size.toInt(),
+    size.toInt(),
+  );
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   return BitmapDescriptor.bytes(Uint8List.view(bytes!.buffer));
 }

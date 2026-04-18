@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../services/location_service.dart';
 import '../services/camera_service.dart';
+import '../services/database_service.dart';
 import '../models/trip.dart';
 import '../utils/heading_marker.dart';
 
@@ -34,6 +36,9 @@ class _RecordingPageState extends State<RecordingPage> {
   // Recording timer
   Timer? _timer;
   Duration _elapsed = Duration.zero;
+  // Wall-clock start of the current recording — used as the trip's
+  // startTime when persisting. Null while idle.
+  DateTime? _startTime;
 
   // Initial camera position (London as default, updates to current location)
   static const LatLng _defaultPosition = LatLng(51.5074, -0.1278);
@@ -110,6 +115,7 @@ class _RecordingPageState extends State<RecordingPage> {
   }
 
   void _startRecording() {
+    _startTime = DateTime.now();
     _locationService.startTracking();
 
     _trackSubscription = _locationService.trackStream.listen((points) {
@@ -152,26 +158,60 @@ class _RecordingPageState extends State<RecordingPage> {
     setState(() => _status = RecordingStatus.recording);
   }
 
-  void _stopRecording() {
+  Future<void> _stopRecording() async {
     final points = _locationService.stopTracking();
     _trackSubscription?.cancel();
     _positionSubscription?.cancel();
     _timer?.cancel();
 
     final photoCount = _photos.length;
+    final startTime = _startTime ?? DateTime.now();
+    final photosSnapshot = List<PhotoMarker>.from(_photos);
 
     setState(() {
       _status = RecordingStatus.idle;
       _trackPoints = [];
       _photos.clear();
       _elapsed = Duration.zero;
+      _startTime = null;
     });
 
-    // Show summary (will save to DB in Phase 5)
-    if (points.isNotEmpty) {
+    // Guard against accidental start→stop with no meaningful movement.
+    if (points.length < 2) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Journey too short to save'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    final trip = Trip(
+      id: _uuid.v4(),
+      title: '${DateFormat('yyyy-MM-dd HH:mm').format(startTime)} Journey',
+      startTime: startTime,
+      endTime: DateTime.now(),
+      trackPoints: points,
+      photos: photosSnapshot,
+    );
+
+    try {
+      await DatabaseService.instance.saveTrip(trip);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Journey recorded: ${points.length} points, $photoCount photos'),
+          content: Text('Saved: ${points.length} points, $photoCount photos'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save journey: $e'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -236,7 +276,9 @@ class _RecordingPageState extends State<RecordingPage> {
         Marker(
           markerId: const MarkerId('__start__'),
           position: LatLng(start.latitude, start.longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
           infoWindow: const InfoWindow(title: 'Start'),
         ),
       );
@@ -262,8 +304,9 @@ class _RecordingPageState extends State<RecordingPage> {
   // how Google/Baidu maps draw routes for strong visibility on satellite/street.
   Set<Polyline> _buildPolylines(ColorScheme colorScheme) {
     if (_trackPoints.length < 2) return const {};
-    final points =
-        _trackPoints.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    final points = _trackPoints
+        .map((p) => LatLng(p.latitude, p.longitude))
+        .toList();
     return {
       Polyline(
         polylineId: const PolylineId('route_outline'),
@@ -362,7 +405,10 @@ class _RecordingPageState extends State<RecordingPage> {
                 heroTag: 'camera',
                 onPressed: _takePhoto,
                 backgroundColor: colorScheme.surface,
-                child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                child: Icon(
+                  Icons.camera_alt_rounded,
+                  color: colorScheme.primary,
+                ),
               ),
             ),
 
@@ -450,13 +496,17 @@ class _RecordingStatusBar extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             isRecording ? 'Recording' : 'Paused',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const Spacer(),
           // Timer
-          Icon(Icons.timer_outlined, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+          Icon(
+            Icons.timer_outlined,
+            size: 16,
+            color: colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
           const SizedBox(width: 4),
           Text(
             formatDuration(elapsed),
@@ -467,12 +517,13 @@ class _RecordingStatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           // Photo count = times the user actively captured a moment
-          Icon(Icons.photo_camera_outlined, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-          const SizedBox(width: 4),
-          Text(
-            '$photoCount',
-            style: Theme.of(context).textTheme.bodyMedium,
+          Icon(
+            Icons.photo_camera_outlined,
+            size: 16,
+            color: colorScheme.onSurface.withValues(alpha: 0.6),
           ),
+          const SizedBox(width: 4),
+          Text('$photoCount', style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -525,7 +576,10 @@ class _ControlPanel extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: onStart,
             icon: const Icon(Icons.play_arrow_rounded, size: 28),
-            label: const Text('Start Recording', style: TextStyle(fontSize: 16)),
+            label: const Text(
+              'Start Recording',
+              style: TextStyle(fontSize: 16),
+            ),
             style: FilledButton.styleFrom(
               backgroundColor: colorScheme.primary,
               shape: RoundedRectangleBorder(
@@ -584,7 +638,9 @@ class _ControlPanel extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('End Journey?'),
-        content: const Text('Do you want to stop recording and save this journey?'),
+        content: const Text(
+          'Do you want to stop recording and save this journey?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -689,7 +745,10 @@ class _PhotoPreviewSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     child: kIsWeb
                         ? Image.network(photo.localPath, fit: BoxFit.contain)
-                        : Image.file(File(photo.localPath), fit: BoxFit.contain),
+                        : Image.file(
+                            File(photo.localPath),
+                            fit: BoxFit.contain,
+                          ),
                   ),
                 ),
               ),
@@ -698,14 +757,22 @@ class _PhotoPreviewSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 child: Row(
                   children: [
-                    Icon(Icons.location_on, size: 16, color: colorScheme.primary),
+                    Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${photo.latitude.toStringAsFixed(4)}, ${photo.longitude.toStringAsFixed(4)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const Spacer(),
-                    Icon(Icons.access_time, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                    Icon(
+                      Icons.access_time,
+                      size: 16,
+                      color: colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${photo.timestamp.hour.toString().padLeft(2, '0')}:${photo.timestamp.minute.toString().padLeft(2, '0')}',

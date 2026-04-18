@@ -64,30 +64,29 @@ class LocationService {
     final hasPermission = await requestPermission();
     if (!hasPermission) return null;
 
-    return await Geolocator.getCurrentPosition(
-      locationSettings: _settings(),
-    );
+    return await Geolocator.getCurrentPosition(locationSettings: _settings());
   }
 
   // Start continuous GPS tracking
   void startTracking() {
     _trackPoints.clear();
 
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: _settings(distanceFilter: 5),
-    ).listen((Position position) {
-      final point = TrackPoint(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        altitude: position.altitude,
-        speed: position.speed,
-        timestamp: DateTime.now(),
-      );
+    _positionSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: _settings(distanceFilter: 5),
+        ).listen((Position position) {
+          final point = TrackPoint(
+            latitude: position.latitude,
+            longitude: position.longitude,
+            altitude: position.altitude,
+            speed: position.speed,
+            timestamp: DateTime.now(),
+          );
 
-      _trackPoints.add(point);
-      _trackController.add(List.unmodifiable(_trackPoints));
-      _positionController.add(position);
-    });
+          _trackPoints.add(point);
+          _trackController.add(List.unmodifiable(_trackPoints));
+          _positionController.add(position);
+        });
   }
 
   // Pause tracking (stop listening but keep existing points)
