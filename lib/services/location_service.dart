@@ -28,6 +28,15 @@ class LocationService {
   static const double _maxAcceptableAccuracyMeters = 30.0;
   static const double _maxImpliedSpeedMps = 56.0; // ~200 km/h
 
+  // EMA smoothing on lat/lng for track points only. Without this, walking
+  // a straight line renders as a wavy curve because each fix carries ±5-15m
+  // noise. Live position stream stays raw so the self-marker follows
+  // without perceptible lag; the smoothed values are used only when
+  // accumulating the persisted track.
+  static const double _trackSmoothingAlpha = 0.35;
+  double? _smoothedLat;
+  double? _smoothedLng;
+
   // Emits the full list of track points whenever a new point is added
   Stream<List<TrackPoint>> get trackStream => _trackController.stream;
 
@@ -128,9 +137,18 @@ class LocationService {
     _positionController.add(position);
 
     if (_isTracking) {
+      if (_smoothedLat == null) {
+        _smoothedLat = position.latitude;
+        _smoothedLng = position.longitude;
+      } else {
+        _smoothedLat = _smoothedLat! * (1 - _trackSmoothingAlpha) +
+            position.latitude * _trackSmoothingAlpha;
+        _smoothedLng = _smoothedLng! * (1 - _trackSmoothingAlpha) +
+            position.longitude * _trackSmoothingAlpha;
+      }
       final point = TrackPoint(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: _smoothedLat!,
+        longitude: _smoothedLng!,
         altitude: position.altitude,
         speed: position.speed,
         timestamp: now,
@@ -144,6 +162,8 @@ class LocationService {
   // continues to follow after stop / pause.
   void startTracking() {
     _trackPoints.clear();
+    _smoothedLat = null;
+    _smoothedLng = null;
     _isTracking = true;
     // Fire-and-forget; permission is expected to be granted already.
     startLiveUpdates();

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -60,6 +61,13 @@ class _RecordingPageState extends State<RecordingPage> {
   double? _heading;
   StreamSubscription? _compassSubscription;
   BitmapDescriptor? _headingIcon;
+  // Circular EMA state for heading smoothing. Angles can't be linearly
+  // averaged (359° and 1° would collapse to 180°), so we smooth sin/cos
+  // components and recover the angle with atan2. Alpha 0.15 trades a
+  // slight response lag for visibly calmer rotation under magnetic noise.
+  static const double _headingSmoothingAlpha = 0.15;
+  double? _headingSmoothedSin;
+  double? _headingSmoothedCos;
 
   // Current map zoom level, used to size the heading marker proportionally.
   double _currentZoom = 15.0;
@@ -100,7 +108,23 @@ class _RecordingPageState extends State<RecordingPage> {
 
     _compassSubscription = FlutterCompass.events?.listen((event) {
       if (!mounted || event.heading == null) return;
-      setState(() => _heading = event.heading);
+      final rad = event.heading! * math.pi / 180;
+      final s = math.sin(rad);
+      final c = math.cos(rad);
+      if (_headingSmoothedSin == null || _headingSmoothedCos == null) {
+        _headingSmoothedSin = s;
+        _headingSmoothedCos = c;
+      } else {
+        _headingSmoothedSin = _headingSmoothedSin! * (1 - _headingSmoothingAlpha) +
+            s * _headingSmoothingAlpha;
+        _headingSmoothedCos = _headingSmoothedCos! * (1 - _headingSmoothingAlpha) +
+            c * _headingSmoothingAlpha;
+      }
+      var deg = math.atan2(_headingSmoothedSin!, _headingSmoothedCos!) *
+          180 /
+          math.pi;
+      if (deg < 0) deg += 360;
+      setState(() => _heading = deg);
     });
   }
 
