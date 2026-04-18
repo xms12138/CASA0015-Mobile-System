@@ -4,12 +4,29 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import '../models/trip.dart';
 
-// GPS tracking service: handles permissions, location stream, and track recording
+// GPS tracking service: handles permissions, the always-on location stream,
+// and optional track accumulation during a recording session.
 class LocationService {
   StreamSubscription<Position>? _positionSubscription;
+  bool _isTracking = false;
+
+  // Last fix that passed both gates. Used by the speed gate regardless of
+  // whether we're currently accumulating track points, so idle live updates
+  // also benefit from noise filtering.
+  Position? _lastAcceptedPosition;
+  DateTime? _lastAcceptedAt;
+
   final List<TrackPoint> _trackPoints = [];
   final _trackController = StreamController<List<TrackPoint>>.broadcast();
   final _positionController = StreamController<Position>.broadcast();
+
+  // Huawei devices w/o Google Play Services fall back to the native Android
+  // LocationManager, which mixes GPS + NETWORK providers without any fusion.
+  // NETWORK fixes are cell-tower / WiFi triangulations accurate only to
+  // hundreds of metres — those show up as sudden "teleport" points. Gate 1
+  // drops low-confidence fixes; gate 2 drops physically impossible jumps.
+  static const double _maxAcceptableAccuracyMeters = 30.0;
+  static const double _maxImpliedSpeedMps = 56.0; // ~200 km/h
 
   // Emits the full list of track points whenever a new point is added
   Stream<List<TrackPoint>> get trackStream => _trackController.stream;
@@ -67,42 +84,85 @@ class LocationService {
     return await Geolocator.getCurrentPosition(locationSettings: _settings());
   }
 
-  // Start continuous GPS tracking
-  void startTracking() {
-    _trackPoints.clear();
-
-    _positionSubscription =
-        Geolocator.getPositionStream(
-          locationSettings: _settings(distanceFilter: 5),
-        ).listen((Position position) {
-          final point = TrackPoint(
-            latitude: position.latitude,
-            longitude: position.longitude,
-            altitude: position.altitude,
-            speed: position.speed,
-            timestamp: DateTime.now(),
-          );
-
-          _trackPoints.add(point);
-          _trackController.add(List.unmodifiable(_trackPoints));
-          _positionController.add(position);
-        });
+  // Start the always-on position stream feeding the self-marker and
+  // (when recording) the track. Idempotent — repeat calls are no-ops
+  // while a subscription exists.
+  Future<bool> startLiveUpdates() async {
+    if (_positionSubscription != null) return true;
+    final ok = await requestPermission();
+    if (!ok) return false;
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: _settings(distanceFilter: 5),
+    ).listen(_onPosition);
+    return true;
   }
 
-  // Pause tracking (stop listening but keep existing points)
-  void pauseTracking() {
-    _positionSubscription?.pause();
-  }
-
-  // Resume tracking after pause
-  void resumeTracking() {
-    _positionSubscription?.resume();
-  }
-
-  // Stop tracking and return all recorded points
-  List<TrackPoint> stopTracking() {
+  void stopLiveUpdates() {
     _positionSubscription?.cancel();
     _positionSubscription = null;
+    _lastAcceptedPosition = null;
+    _lastAcceptedAt = null;
+  }
+
+  void _onPosition(Position position) {
+    if (position.accuracy > _maxAcceptableAccuracyMeters) return;
+
+    final now = DateTime.now();
+    final prev = _lastAcceptedPosition;
+    final prevAt = _lastAcceptedAt;
+    if (prev != null && prevAt != null) {
+      final dtSec = now.difference(prevAt).inMilliseconds / 1000.0;
+      if (dtSec > 0) {
+        final metres = Geolocator.distanceBetween(
+          prev.latitude,
+          prev.longitude,
+          position.latitude,
+          position.longitude,
+        );
+        if (metres / dtSec > _maxImpliedSpeedMps) return;
+      }
+    }
+
+    _lastAcceptedPosition = position;
+    _lastAcceptedAt = now;
+    _positionController.add(position);
+
+    if (_isTracking) {
+      final point = TrackPoint(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        altitude: position.altitude,
+        speed: position.speed,
+        timestamp: now,
+      );
+      _trackPoints.add(point);
+      _trackController.add(List.unmodifiable(_trackPoints));
+    }
+  }
+
+  // Begin a recording session. Live updates are kept on so the self-marker
+  // continues to follow after stop / pause.
+  void startTracking() {
+    _trackPoints.clear();
+    _isTracking = true;
+    // Fire-and-forget; permission is expected to be granted already.
+    startLiveUpdates();
+  }
+
+  // Pause point accumulation without stopping the feed. The self-marker
+  // keeps following so the user can see they're still being located.
+  void pauseTracking() {
+    _isTracking = false;
+  }
+
+  void resumeTracking() {
+    _isTracking = true;
+  }
+
+  // End the recording session and return the collected points. Live
+  // updates keep running — they're torn down by dispose() or stopLiveUpdates().
+  List<TrackPoint> stopTracking() {
+    _isTracking = false;
     return List.unmodifiable(_trackPoints);
   }
 

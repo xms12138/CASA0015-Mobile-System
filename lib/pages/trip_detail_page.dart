@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 
@@ -128,19 +129,58 @@ class _TripDetailPageState extends State<TripDetailPage> {
         );
       }
     }
-    for (final photo in trip.photos) {
+    final clusters = _clusterPhotos(trip.photos);
+    for (final cluster in clusters) {
+      final first = cluster.first;
       markers.add(
         Marker(
-          markerId: MarkerId(photo.id),
-          position: LatLng(photo.latitude, photo.longitude),
+          markerId: MarkerId(first.id),
+          position: LatLng(first.latitude, first.longitude),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueAzure,
           ),
-          onTap: () => _showPhotoPreview(photo),
+          // Above start/end pins so short-distance trips don't hide photos.
+          zIndexInt: 100,
+          infoWindow: cluster.length > 1
+              ? InfoWindow(title: '${cluster.length} photos')
+              : InfoWindow.noText,
+          onTap: () => cluster.length == 1
+              ? _showPhotoPreview(cluster.first)
+              : _showPhotoCluster(cluster),
         ),
       );
     }
     return markers;
+  }
+
+  // Greedy clustering: photos within _photoClusterRadiusMeters of an
+  // existing cluster's first photo join it; otherwise start a new one.
+  // Photos arrive sorted by timestamp, so the first photo acts as a
+  // stable anchor — good enough for the "stood still and took a few
+  // shots" case without a fancy centroid update.
+  static const double _photoClusterRadiusMeters = 10.0;
+
+  List<List<PhotoMarker>> _clusterPhotos(List<PhotoMarker> photos) {
+    final clusters = <List<PhotoMarker>>[];
+    for (final photo in photos) {
+      var placed = false;
+      for (final cluster in clusters) {
+        final anchor = cluster.first;
+        final distance = Geolocator.distanceBetween(
+          anchor.latitude,
+          anchor.longitude,
+          photo.latitude,
+          photo.longitude,
+        );
+        if (distance <= _photoClusterRadiusMeters) {
+          cluster.add(photo);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) clusters.add([photo]);
+    }
+    return clusters;
   }
 
   void _showPhotoPreview(PhotoMarker photo) {
@@ -150,6 +190,58 @@ class _TripDetailPageState extends State<TripDetailPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => _PhotoPreviewSheet(photo: photo),
     );
+  }
+
+  void _showPhotoCluster(List<PhotoMarker> photos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PhotoClusterSheet(
+        photos: photos,
+        onPhotoTap: (photo) {
+          Navigator.of(context).pop();
+          _showPhotoPreview(photo);
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete() async {
+    final trip = _trip;
+    if (trip == null) return;
+    final colorScheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete journey?'),
+        content: const Text(
+          'This will permanently remove the journey, its track points and photos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await DatabaseService.instance.deleteTrip(trip.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete: $e')),
+      );
+    }
   }
 
   @override
@@ -169,6 +261,15 @@ class _TripDetailPageState extends State<TripDetailPage> {
         title: Text(trip?.title ?? 'Trip Detail'),
         backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
+        actions: trip == null
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Delete journey',
+                  onPressed: _confirmDelete,
+                ),
+              ],
       ),
       body: _buildBody(context, colorScheme),
     );
@@ -207,6 +308,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
             polylines: _buildPolylines(colorScheme, trip.trackPoints),
           ),
         ),
+        if (trip.weatherRecords.isNotEmpty)
+          _WeatherTimeline(records: trip.weatherRecords),
         _SummaryBar(trip: trip),
       ],
     );
@@ -451,5 +554,322 @@ class _PhotoPreviewSheet extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+// Multi-photo cluster: horizontal thumbnail strip. Tap a thumb to pop
+// the sheet and open the full _PhotoPreviewSheet for that photo.
+class _PhotoClusterSheet extends StatelessWidget {
+  final List<PhotoMarker> photos;
+  final ValueChanged<PhotoMarker> onPhotoTap;
+
+  const _PhotoClusterSheet({required this.photos, required this.onPhotoTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.photo_library_rounded,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${photos.length} photos at this spot',
+                    style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 140,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: photos.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) {
+                  final photo = photos[i];
+                  return _ClusterThumb(
+                    photo: photo,
+                    onTap: () => onPhotoTap(photo),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClusterThumb extends StatelessWidget {
+  final PhotoMarker photo;
+  final VoidCallback onTap;
+
+  const _ClusterThumb({required this.photo, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            SizedBox(
+              width: 140,
+              height: 140,
+              child: kIsWeb
+                  ? Image.network(photo.localPath, fit: BoxFit.cover)
+                  : Image.file(File(photo.localPath), fit: BoxFit.cover),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.6),
+                    ],
+                  ),
+                ),
+                child: Text(
+                  '${photo.timestamp.hour.toString().padLeft(2, '0')}:${photo.timestamp.minute.toString().padLeft(2, '0')}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Phase 6: horizontal strip of environment snapshots captured during
+// recording. Hidden when the trip has no records (legacy trips).
+class _WeatherTimeline extends StatelessWidget {
+  final List<WeatherRecord> records;
+
+  const _WeatherTimeline({required this.records});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.onSurface.withValues(alpha: 0.05),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.eco_rounded,
+                size: 16,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Environment along the way',
+                style: textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: records.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, i) => _WeatherCard(record: records[i]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeatherCard extends StatelessWidget {
+  final WeatherRecord record;
+
+  const _WeatherCard({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final time =
+        '${record.timestamp.hour.toString().padLeft(2, '0')}:${record.timestamp.minute.toString().padLeft(2, '0')}';
+    final temp = record.temperature == null
+        ? '—'
+        : '${record.temperature!.round()}°';
+
+    return Container(
+      width: 128,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _weatherIconFor(record.weatherDescription),
+                size: 18,
+                color: colorScheme.primary,
+              ),
+              const Spacer(),
+              Text(
+                time,
+                style: textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            temp,
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          if (record.aqi != null) _AqiBadge(level: record.aqi!),
+        ],
+      ),
+    );
+  }
+}
+
+class _AqiBadge extends StatelessWidget {
+  final int level;
+
+  const _AqiBadge({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = _aqiMeta(level);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.air, size: 11, color: color),
+          const SizedBox(width: 3),
+          Text(
+            'AQI $label',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Maps an OpenWeatherMap weather description string to a Material icon.
+// Substrings are checked in order from most specific to most generic
+// so "light rain" matches "rain" rather than something less precise.
+IconData _weatherIconFor(String? description) {
+  final d = description?.toLowerCase() ?? '';
+  if (d.contains('thunder')) return Icons.flash_on_rounded;
+  if (d.contains('snow')) return Icons.ac_unit_rounded;
+  if (d.contains('rain') || d.contains('drizzle') || d.contains('shower')) {
+    return Icons.water_drop_rounded;
+  }
+  if (d.contains('mist') || d.contains('fog') || d.contains('haze') ||
+      d.contains('smoke') || d.contains('dust')) {
+    return Icons.cloud_queue_rounded;
+  }
+  if (d.contains('clear')) return Icons.wb_sunny_rounded;
+  if (d.contains('cloud')) return Icons.cloud_rounded;
+  return Icons.wb_cloudy_rounded;
+}
+
+// OpenWeatherMap AQI: 1 Good, 2 Fair, 3 Moderate, 4 Poor, 5 Very Poor.
+// Using discrete colours — unknown values (outside 1–5) render neutral.
+(String, Color) _aqiMeta(int level) {
+  switch (level) {
+    case 1:
+      return ('Good', const Color(0xFF2E7D32));
+    case 2:
+      return ('Fair', const Color(0xFF689F38));
+    case 3:
+      return ('Moderate', const Color(0xFFF9A825));
+    case 4:
+      return ('Poor', const Color(0xFFE64A19));
+    case 5:
+      return ('V.Poor', const Color(0xFF7B1FA2));
+    default:
+      return ('?', const Color(0xFF9E9E9E));
   }
 }

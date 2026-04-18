@@ -9,7 +9,9 @@ import 'package:uuid/uuid.dart';
 import '../services/location_service.dart';
 import '../services/camera_service.dart';
 import '../services/database_service.dart';
+import '../services/weather_service.dart';
 import '../models/trip.dart';
+import '../utils/constants.dart';
 import '../utils/heading_marker.dart';
 
 enum RecordingStatus { idle, recording, paused }
@@ -25,17 +27,27 @@ class _RecordingPageState extends State<RecordingPage> {
   GoogleMapController? _mapController;
   final LocationService _locationService = LocationService();
   final CameraService _cameraService = CameraService();
+  final WeatherService _weatherService = WeatherService();
   final Uuid _uuid = const Uuid();
 
   RecordingStatus _status = RecordingStatus.idle;
   List<TrackPoint> _trackPoints = [];
   final List<PhotoMarker> _photos = [];
+  final List<WeatherRecord> _weatherRecords = [];
   StreamSubscription? _trackSubscription;
   StreamSubscription? _positionSubscription;
 
   // Recording timer
   Timer? _timer;
   Duration _elapsed = Duration.zero;
+  // Separate periodic fetch for Phase 6 weather/AQI. Driven at
+  // AppConstants.weatherIntervalMin (5 min). Independent from _timer
+  // because the cadences differ by ~300x — sharing the same Timer
+  // would force either wasteful polling or bookkeeping.
+  Timer? _weatherTimer;
+  // One-shot snackbar guard: don't spam the user if every fetch fails
+  // (e.g. phone is offline for the whole recording).
+  bool _weatherWarnedThisSession = false;
   // Wall-clock start of the current recording — used as the trip's
   // startTime when persisting. Null while idle.
   DateTime? _startTime;
@@ -59,6 +71,22 @@ class _RecordingPageState extends State<RecordingPage> {
     super.initState();
     _initLocation();
     _initHeading();
+    _startLiveUpdates();
+  }
+
+  // Subscribe to the live position stream for the duration of the page.
+  // Marker follows the user even before recording starts; camera only
+  // auto-follows while actively recording, so idle pan/zoom isn't yanked.
+  Future<void> _startLiveUpdates() async {
+    await _locationService.startLiveUpdates();
+    _positionSubscription = _locationService.positionStream.listen((pos) {
+      if (!mounted) return;
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      setState(() => _currentPosition = latLng);
+      if (_status != RecordingStatus.idle) {
+        _mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
+      }
+    });
   }
 
   Future<void> _initHeading() async {
@@ -124,14 +152,6 @@ class _RecordingPageState extends State<RecordingPage> {
       }
     });
 
-    _positionSubscription = _locationService.positionStream.listen((pos) {
-      final latLng = LatLng(pos.latitude, pos.longitude);
-      if (mounted) {
-        setState(() => _currentPosition = latLng);
-        _mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
-      }
-    });
-
     // Start elapsed time timer
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -139,12 +159,16 @@ class _RecordingPageState extends State<RecordingPage> {
       }
     });
 
+    _startWeatherFetching();
+
     setState(() => _status = RecordingStatus.recording);
   }
 
   void _pauseRecording() {
     _locationService.pauseTracking();
     _timer?.cancel();
+    _weatherTimer?.cancel();
+    _weatherTimer = null;
     setState(() => _status = RecordingStatus.paused);
   }
 
@@ -155,23 +179,60 @@ class _RecordingPageState extends State<RecordingPage> {
         setState(() => _elapsed += const Duration(seconds: 1));
       }
     });
+    _startWeatherFetching();
     setState(() => _status = RecordingStatus.recording);
+  }
+
+  // Kick off an immediate fetch + schedule periodic fetches.
+  // Immediate fetch matters for short trips — without it, a 4-minute
+  // walk would save zero weather rows.
+  void _startWeatherFetching() {
+    _fetchWeatherOnce();
+    _weatherTimer = Timer.periodic(
+      Duration(minutes: AppConstants.weatherIntervalMin),
+      (_) => _fetchWeatherOnce(),
+    );
+  }
+
+  Future<void> _fetchWeatherOnce() async {
+    final pos = _currentPosition;
+    if (pos == null) return; // No GPS fix yet — skip this tick.
+    final record = await _weatherService.fetchAt(pos.latitude, pos.longitude);
+    if (!mounted) return;
+    if (record == null) {
+      if (!_weatherWarnedThisSession) {
+        _weatherWarnedThisSession = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Weather data unavailable — check API key or network'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+    _weatherRecords.add(record);
   }
 
   Future<void> _stopRecording() async {
     final points = _locationService.stopTracking();
     _trackSubscription?.cancel();
-    _positionSubscription?.cancel();
+    _trackSubscription = null;
     _timer?.cancel();
+    _weatherTimer?.cancel();
+    _weatherTimer = null;
 
     final photoCount = _photos.length;
     final startTime = _startTime ?? DateTime.now();
     final photosSnapshot = List<PhotoMarker>.from(_photos);
+    final weatherSnapshot = List<WeatherRecord>.from(_weatherRecords);
 
     setState(() {
       _status = RecordingStatus.idle;
       _trackPoints = [];
       _photos.clear();
+      _weatherRecords.clear();
+      _weatherWarnedThisSession = false;
       _elapsed = Duration.zero;
       _startTime = null;
     });
@@ -196,6 +257,7 @@ class _RecordingPageState extends State<RecordingPage> {
       endTime: DateTime.now(),
       trackPoints: points,
       photos: photosSnapshot,
+      weatherRecords: weatherSnapshot,
     );
 
     try {
@@ -265,6 +327,8 @@ class _RecordingPageState extends State<RecordingPage> {
         markerId: MarkerId(photo.id),
         position: LatLng(photo.latitude, photo.longitude),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        // Above start pin so they don't disappear when user stands still.
+        zIndexInt: 100,
         onTap: () => _showPhotoPreview(photo),
       );
     }).toSet();
@@ -337,6 +401,7 @@ class _RecordingPageState extends State<RecordingPage> {
     _positionSubscription?.cancel();
     _compassSubscription?.cancel();
     _timer?.cancel();
+    _weatherTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }

@@ -8,7 +8,7 @@ class AppConstants {
   static const int dbVersion = 1;
 
   // API placeholders (replace with real keys)
-  static const String openWeatherApiKey = 'YOUR_OPENWEATHER_API_KEY';
+  static const String openWeatherApiKey = 'bb650054e9a596e9e4907cfab1e3bdca';
   static const String googleMapsApiKey =
       'AIzaSyA3tq9GYy61HfQT0Ob4MrBLIAXiKjRIBx0';
 

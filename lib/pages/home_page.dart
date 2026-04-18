@@ -1,8 +1,54 @@
 import 'package:flutter/material.dart';
-import 'main_scaffold.dart';
+import 'package:intl/intl.dart';
 
-class HomePage extends StatelessWidget {
+import '../models/trip.dart';
+import '../services/database_service.dart';
+import 'main_scaffold.dart';
+import 'trip_detail_page.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  TripStats _stats = const TripStats.empty();
+  List<Trip> _recentTrips = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // IndexedStack keeps HomePage mounted, so initState runs once —
+    // listen for DB changes so new recordings reflect in the stat
+    // cards and Recent Journeys without needing a tab revisit.
+    DatabaseService.instance.tripsRevision.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    DatabaseService.instance.tripsRevision.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final stats = await DatabaseService.instance.loadStats();
+      final trips = await DatabaseService.instance.loadTrips();
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _recentTrips = trips.take(3).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,21 +114,21 @@ class HomePage extends StatelessWidget {
                       _StatCard(
                         icon: Icons.route_rounded,
                         label: 'Journeys',
-                        value: '0',
+                        value: '${_stats.tripCount}',
                         color: colorScheme.primary,
                       ),
                       const SizedBox(width: 12),
                       _StatCard(
                         icon: Icons.straighten_rounded,
                         label: 'Total km',
-                        value: '0',
+                        value: _formatKm(_stats.totalMeters),
                         color: colorScheme.secondary,
                       ),
                       const SizedBox(width: 12),
                       _StatCard(
                         icon: Icons.photo_library_rounded,
                         label: 'Photos',
-                        value: '0',
+                        value: '${_stats.photoCount}',
                         color: colorScheme.tertiary,
                       ),
                     ],
@@ -94,16 +140,45 @@ class HomePage extends StatelessWidget {
                   const SizedBox(height: 24),
 
                   // Recent journeys header
-                  Text(
-                    'Recent Journeys',
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Recent Journeys',
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_stats.tripCount > _recentTrips.length)
+                        TextButton(
+                          onPressed: () {
+                            MainScaffold.of(context)?.switchToTab(2);
+                          },
+                          child: const Text('See all'),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
-                  // Empty state
-                  _EmptyJourneysState(colorScheme: colorScheme),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_recentTrips.isEmpty)
+                    _EmptyJourneysState(colorScheme: colorScheme)
+                  else
+                    Column(
+                      children: [
+                        for (final trip in _recentTrips) ...[
+                          _RecentTripCard(
+                            trip: trip,
+                            onTap: () => _openTrip(trip),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -111,6 +186,20 @@ class HomePage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openTrip(Trip trip) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TripDetailPage(tripId: trip.id)),
+    );
+    // Detail page may have deleted the trip — reload so stats catch up
+    // even if tripsRevision already fired while we were pushed.
+    if (mounted) _load();
+  }
+
+  String _formatKm(double meters) {
+    if (meters < 1000) return '${meters.toStringAsFixed(0)} m';
+    return (meters / 1000).toStringAsFixed(1);
   }
 }
 
@@ -237,6 +326,102 @@ class _StartRecordingCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RecentTripCard extends StatelessWidget {
+  final Trip trip;
+  final VoidCallback onTap;
+
+  const _RecentTripCard({required this.trip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final rawDuration = trip.endTime == null
+        ? Duration.zero
+        : trip.endTime!.difference(trip.startTime);
+    final duration = rawDuration.isNegative ? Duration.zero : rawDuration;
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.route_rounded,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      trip.title,
+                      style: textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _relativeDate(trip.startTime),
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                _formatDuration(duration),
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _relativeDate(DateTime t) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(t.year, t.month, t.day);
+    final daysAgo = today.difference(that).inDays;
+    final hm = DateFormat('HH:mm').format(t);
+    if (daysAgo == 0) return 'Today $hm';
+    if (daysAgo == 1) return 'Yesterday $hm';
+    return DateFormat('yyyy-MM-dd HH:mm').format(t);
+  }
+
+  String _formatDuration(Duration d) {
+    if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes.remainder(60)}m';
+    if (d.inMinutes > 0) return '${d.inMinutes}m';
+    return '${d.inSeconds}s';
   }
 }
 
