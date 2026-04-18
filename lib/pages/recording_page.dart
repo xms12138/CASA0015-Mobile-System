@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../services/location_service.dart';
 import '../services/camera_service.dart';
 import '../models/trip.dart';
+import '../utils/heading_marker.dart';
 
 enum RecordingStatus { idle, recording, paused }
 
@@ -37,10 +39,62 @@ class _RecordingPageState extends State<RecordingPage> {
   static const LatLng _defaultPosition = LatLng(51.5074, -0.1278);
   LatLng? _currentPosition;
 
+  // Compass heading in degrees (0 = North). null when sensor unavailable.
+  double? _heading;
+  StreamSubscription? _compassSubscription;
+  BitmapDescriptor? _headingIcon;
+
+  // Current map zoom level, used to size the heading marker proportionally.
+  double _currentZoom = 15.0;
+  double _lastIconSize = 0;
+  bool _regeneratingIcon = false;
+
   @override
   void initState() {
     super.initState();
     _initLocation();
+    _initHeading();
+  }
+
+  Future<void> _initHeading() async {
+    final size = _iconSizeForZoom(_currentZoom);
+    final icon = await buildHeadingMarker(size: size);
+    if (!mounted) return;
+    setState(() {
+      _headingIcon = icon;
+      _lastIconSize = size;
+    });
+
+    _compassSubscription = FlutterCompass.events?.listen((event) {
+      if (!mounted || event.heading == null) return;
+      setState(() => _heading = event.heading);
+    });
+  }
+
+  // Marker pixel size grows/shrinks with zoom so it stays visually consistent
+  // on screen (bigger when zoomed in, smaller when zoomed out).
+  double _iconSizeForZoom(double zoom) {
+    return (40.0 + (zoom - 14) * 10).clamp(28.0, 96.0);
+  }
+
+  // Re-render the heading icon at a new size; debounced so we don't spam
+  // expensive PictureRecorder work on every micro-zoom change.
+  Future<void> _updateHeadingIconSize() async {
+    if (_regeneratingIcon) return;
+    final target = _iconSizeForZoom(_currentZoom);
+    if ((target - _lastIconSize).abs() < 6) return;
+
+    _regeneratingIcon = true;
+    try {
+      final icon = await buildHeadingMarker(size: target);
+      if (!mounted) return;
+      setState(() {
+        _headingIcon = icon;
+        _lastIconSize = target;
+      });
+    } finally {
+      _regeneratingIcon = false;
+    }
   }
 
   Future<void> _initLocation() async {
@@ -164,9 +218,9 @@ class _RecordingPageState extends State<RecordingPage> {
     );
   }
 
-  // Build map markers from photos
-  Set<Marker> _buildPhotoMarkers() {
-    return _photos.map((photo) {
+  // Build map markers: photos + journey start pin + self (with heading).
+  Set<Marker> _buildMarkers() {
+    final markers = _photos.map((photo) {
       return Marker(
         markerId: MarkerId(photo.id),
         position: LatLng(photo.latitude, photo.longitude),
@@ -174,6 +228,58 @@ class _RecordingPageState extends State<RecordingPage> {
         onTap: () => _showPhotoPreview(photo),
       );
     }).toSet();
+
+    // Start-of-journey pin: only relevant while actively tracking points.
+    if (_trackPoints.isNotEmpty && _status != RecordingStatus.idle) {
+      final start = _trackPoints.first;
+      markers.add(
+        Marker(
+          markerId: const MarkerId('__start__'),
+          position: LatLng(start.latitude, start.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'Start'),
+        ),
+      );
+    }
+
+    if (_currentPosition != null && _headingIcon != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('__self__'),
+          position: _currentPosition!,
+          icon: _headingIcon!,
+          rotation: _heading ?? 0,
+          anchor: const Offset(0.5, 0.5),
+          flat: true,
+          zIndexInt: 999,
+        ),
+      );
+    }
+    return markers;
+  }
+
+  // Route polylines: a thick white outline under a coloured top line, mimicking
+  // how Google/Baidu maps draw routes for strong visibility on satellite/street.
+  Set<Polyline> _buildPolylines(ColorScheme colorScheme) {
+    if (_trackPoints.length < 2) return const {};
+    final points =
+        _trackPoints.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    return {
+      Polyline(
+        polylineId: const PolylineId('route_outline'),
+        points: points,
+        color: Colors.white,
+        width: 11,
+        zIndex: 1,
+      ),
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: points,
+        color: colorScheme.primary,
+        width: 7,
+        zIndex: 2,
+      ),
+    };
   }
 
   String _formatDuration(Duration d) {
@@ -186,6 +292,7 @@ class _RecordingPageState extends State<RecordingPage> {
     _locationService.dispose();
     _trackSubscription?.cancel();
     _positionSubscription?.cancel();
+    _compassSubscription?.cancel();
     _timer?.cancel();
     _mapController?.dispose();
     super.dispose();
@@ -213,25 +320,18 @@ class _RecordingPageState extends State<RecordingPage> {
                 );
               }
             },
-            myLocationEnabled: true,
+            onCameraMove: (position) {
+              _currentZoom = position.zoom;
+            },
+            onCameraIdle: _updateHeadingIconSize,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
-            // Photo markers on map
-            markers: _buildPhotoMarkers(),
-            // Draw the route polyline
-            polylines: _trackPoints.length >= 2
-                ? {
-                    Polyline(
-                      polylineId: const PolylineId('route'),
-                      points: _trackPoints
-                          .map((p) => LatLng(p.latitude, p.longitude))
-                          .toList(),
-                      color: colorScheme.primary,
-                      width: 5,
-                    ),
-                  }
-                : {},
+            // Photo markers + journey start + self (with heading indicator)
+            markers: _buildMarkers(),
+            // White-outlined coloured polyline = the traveled path
+            polylines: _buildPolylines(colorScheme),
           ),
 
           // Top bar with recording status
@@ -245,7 +345,7 @@ class _RecordingPageState extends State<RecordingPage> {
                     _RecordingStatusBar(
                       status: _status,
                       elapsed: _elapsed,
-                      pointCount: _trackPoints.length,
+                      photoCount: _photos.length,
                       formatDuration: _formatDuration,
                     ),
                 ],
@@ -308,13 +408,13 @@ class _RecordingPageState extends State<RecordingPage> {
 class _RecordingStatusBar extends StatelessWidget {
   final RecordingStatus status;
   final Duration elapsed;
-  final int pointCount;
+  final int photoCount;
   final String Function(Duration) formatDuration;
 
   const _RecordingStatusBar({
     required this.status,
     required this.elapsed,
-    required this.pointCount,
+    required this.photoCount,
     required this.formatDuration,
   });
 
@@ -366,11 +466,11 @@ class _RecordingStatusBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          // Point count
-          Icon(Icons.location_on_outlined, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+          // Photo count = times the user actively captured a moment
+          Icon(Icons.photo_camera_outlined, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
           const SizedBox(width: 4),
           Text(
-            '$pointCount pts',
+            '$photoCount',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],

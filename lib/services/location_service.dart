@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import '../models/trip.dart';
 
@@ -39,15 +41,31 @@ class LocationService {
     return true;
   }
 
+  // Build platform-specific location settings.
+  // Android: force native LocationManager to avoid relying on Google Play Services
+  // (important for devices without full GMS, e.g. Huawei/HarmonyOS).
+  LocationSettings _settings({int distanceFilter = 0}) {
+    if (!kIsWeb && Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: distanceFilter,
+        forceLocationManager: true,
+        intervalDuration: const Duration(seconds: 2),
+      );
+    }
+    return LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: distanceFilter,
+    );
+  }
+
   // Get the current position once
   Future<Position?> getCurrentPosition() async {
     final hasPermission = await requestPermission();
     if (!hasPermission) return null;
 
     return await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
+      locationSettings: _settings(),
     );
   }
 
@@ -55,13 +73,8 @@ class LocationService {
   void startTracking() {
     _trackPoints.clear();
 
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5, // minimum distance (meters) before update
-    );
-
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
+      locationSettings: _settings(distanceFilter: 5),
     ).listen((Position position) {
       final point = TrackPoint(
         latitude: position.latitude,
