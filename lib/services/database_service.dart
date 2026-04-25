@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart' as p;
@@ -5,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/trip.dart';
+import 'firebase_service.dart';
 
 // Aggregated stats for the home page. Computed in a single sweep so
 // the home page doesn't need to hydrate every trip's sub-tables.
@@ -162,6 +165,9 @@ class DatabaseService {
       await batch.commit(noResult: true);
     });
     tripsRevision.value++;
+    // Mirror to Firestore in the background. Failure is logged inside
+    // FirebaseService — local persistence is the source of truth.
+    unawaited(FirebaseService.instance.syncTrip(trip));
   }
 
   // List view: only the trips table, newest first. Sub-lists are left
@@ -260,5 +266,6 @@ class DatabaseService {
     final db = await database;
     await db.delete('trips', where: 'id = ?', whereArgs: [id]);
     tripsRevision.value++;
+    unawaited(FirebaseService.instance.deleteTripFromCloud(id));
   }
 }

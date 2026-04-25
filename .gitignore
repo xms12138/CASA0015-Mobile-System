@@ -51,3 +51,8 @@ DEVLOG.md
 
 # Local API keys (dart-define-from-file). See env.example.json.
 env.json
+
+# Firebase config files (contain API keys). Not committed by design —
+# anyone building locally must run `flutterfire configure` themselves.
+android/app/google-services.json
+lib/firebase_options.dart

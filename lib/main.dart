@@ -1,7 +1,19 @@
-import 'package:flutter/material.dart';
-import 'pages/splash_page.dart';
+import 'dart:async';
 
-void main() {
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'firebase_options.dart';
+import 'pages/splash_page.dart';
+import 'services/firebase_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  // Fire-and-forget anonymous sign-in. Errors are logged but don't block
+  // app startup — trips still save locally even if the cloud path fails.
+  unawaited(FirebaseService.instance.ensureSignedIn());
   runApp(const TravelTraceApp());
 }
 

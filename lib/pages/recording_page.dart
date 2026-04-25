@@ -14,6 +14,7 @@ import '../services/weather_service.dart';
 import '../models/trip.dart';
 import '../utils/constants.dart';
 import '../utils/heading_marker.dart';
+import '../widgets/permission_blocker_dialog.dart';
 
 enum RecordingStatus { idle, recording, paused }
 
@@ -77,9 +78,24 @@ class _RecordingPageState extends State<RecordingPage> {
   @override
   void initState() {
     super.initState();
-    _initLocation();
     _initHeading();
-    _startLiveUpdates();
+    // Defer to first frame so showDialog has a mounted context if the
+    // location permission is denied and we need to block the user.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapLocation());
+  }
+
+  // Gate the location-dependent setup behind the runtime permission. If
+  // denied (or services off), TravelTrace can't function — show the
+  // blocker dialog whose only action exits the app.
+  Future<void> _bootstrapLocation() async {
+    final ok = await _locationService.requestPermission();
+    if (!mounted) return;
+    if (!ok) {
+      await showPermissionBlockerDialog(context, permissionName: 'Location');
+      return;
+    }
+    await _initLocation();
+    await _startLiveUpdates();
   }
 
   // Subscribe to the live position stream for the duration of the page.
@@ -305,6 +321,17 @@ class _RecordingPageState extends State<RecordingPage> {
   }
 
   Future<void> _takePhoto() async {
+    // Camera permission gate (mobile only — web flow uses gallery picker
+    // which doesn't require runtime camera access).
+    if (!kIsWeb) {
+      final ok = await _cameraService.ensureCameraPermission();
+      if (!mounted) return;
+      if (!ok) {
+        await showPermissionBlockerDialog(context, permissionName: 'Camera');
+        return;
+      }
+    }
+
     // Use gallery on web/desktop, camera on mobile
     final String? path = kIsWeb
         ? await _cameraService.pickFromGallery()

@@ -1,8 +1,17 @@
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // Handles photo capture via device camera
 class CameraService {
   final ImagePicker _picker = ImagePicker();
+
+  // Check + request CAMERA runtime permission. Caller short-circuits on
+  // false so we can distinguish "permission denied" from "user cancelled
+  // the camera intent" (both surface as a null path otherwise).
+  Future<bool> ensureCameraPermission() async {
+    final status = await Permission.camera.request();
+    return status.isGranted;
+  }
 
   // Take a photo using the camera, returns the file path or null if cancelled
   Future<String?> takePhoto() async {
