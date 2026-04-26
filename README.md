@@ -128,7 +128,7 @@ A static landing page is published via **GitHub Pages** at:
 
 > https://xms12138.github.io/CASA0015-Mobile-System/
 
-The page (source under [`docs/landing/`](docs/landing/)) introduces the problem, shows the demo GIF, lists the headline features, and links back to this repository. It is deliberately one page and one purpose — to communicate "what does this app do?" to a reader who has never seen it.
+The page (source: [`docs/index.html`](docs/index.html), single-file Tailwind CDN build) introduces the problem, shows the demo GIF, lists the headline features, and links back to this repository. It is deliberately one page and one purpose — to communicate "what does this app do?" to a reader who has never seen it.
 
 ## Feature overview
 
