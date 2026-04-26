@@ -56,3 +56,4 @@ env.json
 # anyone building locally must run `flutterfire configure` themselves.
 android/app/google-services.json
 lib/firebase_options.dart
+docs/build_*.py
