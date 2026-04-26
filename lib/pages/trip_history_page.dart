@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/trip.dart';
 import '../services/database_service.dart';
+import '../utils/app_theme.dart';
 import 'main_scaffold.dart';
 import 'trip_detail_page.dart';
 
@@ -145,10 +146,10 @@ class _TripCard extends StatelessWidget {
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -158,7 +159,7 @@ class _TripCard extends StatelessWidget {
                 height: 48,
                 decoration: BoxDecoration(
                   color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Icon(
                   Icons.route_rounded,

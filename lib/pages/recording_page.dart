@@ -12,6 +12,7 @@ import '../services/camera_service.dart';
 import '../services/database_service.dart';
 import '../services/weather_service.dart';
 import '../models/trip.dart';
+import '../utils/app_theme.dart';
 import '../utils/constants.dart';
 import '../utils/heading_marker.dart';
 import '../widgets/permission_blocker_dialog.dart';
@@ -589,7 +590,7 @@ class _RecordingStatusBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
@@ -670,7 +671,7 @@ class _ControlPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
@@ -699,7 +700,7 @@ class _ControlPanel extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: colorScheme.primary,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
             ),
           ),
@@ -837,7 +838,7 @@ class _PhotoPreviewSheet extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
           ),
           child: Column(
             children: [
@@ -858,7 +859,7 @@ class _PhotoPreviewSheet extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     child: kIsWeb
                         ? Image.network(photo.localPath, fit: BoxFit.contain)
                         : Image.file(
