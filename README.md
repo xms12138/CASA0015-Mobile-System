@@ -25,6 +25,7 @@ UCL CASA0015 — Mobile Systems & Interactions — Individual Coursework 2025/26
 - [User persona & storyboard](#user-persona--storyboard)
 - [Demo & screenshots](#demo--screenshots)
 - [Landing page](#landing-page)
+- [Download](#download)
 - [Feature overview](#feature-overview)
 - [Sensors used](#sensors-used)
 - [External services & APIs](#external-services--apis)
@@ -78,7 +79,7 @@ Two secondary personas in mind while designing:
 - **The hiker** who wants a recordable route + ambient temperature for each segment of a long walk.
 - **The travel blogger** who wants to publish "I walked 4 km from Highbury to Camden, here's the route, the photos, and the AQI."
 
-### Storyboard — the emotional arc of one journey
+### Storyboard — one journey, beat by beat
 
 ```
 1. SET OUT      ── Splash fades in.  Logo settles.  No friction.
@@ -106,7 +107,7 @@ Two secondary personas in mind while designing:
                   "I'm reliving it, not just remembering it."
 ```
 
-The replay screen is the **emotional payoff** of the whole product — every earlier decision (recording cadence, photo timestamps, weather polling) exists to make this single moment feel rich.
+The replay screen is what the rest of the product builds towards — recording cadence, photo timestamps, and weather polling are all chosen so the slider drag at the end has something worth watching.
 
 ## Demo & screenshots
 
@@ -129,6 +130,32 @@ A static landing page is published via **GitHub Pages** at:
 > https://xms12138.github.io/CASA0015-Mobile-System/
 
 The page (source: [`docs/index.html`](docs/index.html), single-file Tailwind CDN build) introduces the problem, shows the demo GIF, lists the headline features, and links back to this repository. It is deliberately one page and one purpose — to communicate "what does this app do?" to a reader who has never seen it.
+
+## Download
+
+A signed release APK is attached to every GitHub Release of this repository — graders and reviewers can install the app on a real Android device without setting up a Flutter toolchain or supplying API keys.
+
+> **Latest APK:** [Releases page](https://github.com/xms12138/CASA0015-Mobile-System/releases/latest) → download `TravelTrace-release.apk` from the Assets list.
+
+**Install on Android:**
+
+1. Download the APK on the target device (or transfer via USB / `adb install TravelTrace-release.apk`).
+2. Allow installation from the source if prompted (Settings → Security → Install unknown apps).
+3. Open *TravelTrace* and grant the location and camera permissions when asked.
+
+**Specs:**
+
+| | |
+|--|--|
+| Build mode | `release` (R8/ProGuard, tree-shaken icons) |
+| Minimum SDK | 24 (Android 7.0 Nougat) |
+| Target SDK | Flutter default (34) |
+| Size | ≈ 50 MB |
+| ABIs | universal (single APK, all architectures) |
+
+The APK already embeds the Google Maps and OpenWeatherMap keys at build time, so the app works out of the box. Cloud sync (Firebase Auth + Firestore) signs in anonymously on first launch — no account required.
+
+If you would rather build from source, see [Build a release APK](#build-a-release-apk) further down.
 
 ## Feature overview
 
@@ -269,7 +296,6 @@ travel_trace/
 │       └── heading_marker.dart         # Compass marker drawn via PictureRecorder
 ├── android/                            # Manifest + Gradle config
 ├── docs/                               # Screenshots & demo GIF (you add these)
-├── PLAN.md                             # Phase-by-phase development plan
 ├── DEVLOG.md                           # Real-incident root-cause notes
 ├── env.example.json                    # Template for API keys (gitignored: env.json)
 └── pubspec.yaml
@@ -305,6 +331,8 @@ Each headline feature, with the exact file and the function or symbol that imple
 | Build-time API key injection | `lib/utils/constants.dart` | `String.fromEnvironment` (`OPENWEATHER_API_KEY`, `GOOGLE_MAPS_API_KEY`) |
 
 ## Getting started
+
+> **Just want to try the app?** Skip the toolchain — grab the prebuilt APK from the [Releases page](https://github.com/xms12138/CASA0015-Mobile-System/releases/latest). See the [Download](#download) section for install instructions.
 
 ### Prerequisites
 
@@ -439,11 +467,11 @@ Real-device testing on a Huawei EML AL00 surfaced several issues that drove desi
 | Replay clock drifted from slider position on sparse trips | Computed elapsed time from the **continuous** progress (0..1) instead of the rounded track-point index — small drags now move both at the same rate |
 | Permission denial branched into 4 different states | Collapsed to a single dialog with one Exit action — the app cannot function without GPS / camera, so any other branch is theatre |
 
-The iteration log itself is part of the submission: read [`DEVLOG.md`](DEVLOG.md) for the full account (six incidents documented), and the commit history for the code changes that closed each loop.
+The iteration log itself is part of the submission: read [`DEVLOG.md`](DEVLOG.md) for the full account, and the commit history for the code changes that closed each loop.
 
 ## Case studies
 
-Three of the most consequential debugging stories, expanded from the iteration log table above. Each follows a **phenomenon / root cause / resolution / lesson** structure. The remaining incidents (WSL toolchain, Huawei GPS default coordinate, marker collision on identical photos) are catalogued in [`DEVLOG.md`](DEVLOG.md).
+A few of the more consequential debugging stories, expanded from the iteration log above. Each follows a **phenomenon / root cause / resolution / lesson** structure. Other incidents (WSL toolchain, Huawei GPS default coordinate, marker collision on identical photos) are catalogued in [`DEVLOG.md`](DEVLOG.md).
 
 ### Case study 1 — Polyline teleports & self-marker frozen until recording starts
 
@@ -490,7 +518,7 @@ Three implementation details that turned out to matter:
 
 **Phenomenon.** After recording several journeys, Trip History and Record refreshed correctly, but the three Home stat cards (Journeys / Total km / Photos) and the "Recent Journeys" list stayed permanently at zero / empty. Restart, reinstall — same.
 
-**Root cause.** `home_page.dart` had been a `StatelessWidget` since the Phase 2 navigation skeleton, with the three cards passing the literal string `'0'`. The empty-state widget was static. When Phase 5 wired the SQLite database into History, Record, and Trip Detail, **Home was missed** — its placeholders looked like real-data UI, so the gap went unnoticed during phase verification. A page that *appears* to work is harder to spot as broken than one that crashes.
+**Root cause.** `home_page.dart` had been a `StatelessWidget` since the early navigation skeleton, with the three cards passing the literal string `'0'`. The empty-state widget was static. When the SQLite layer was wired into History, Record, and Trip Detail, **Home was missed** — its placeholders looked like real-data UI, so the gap went unnoticed during manual testing. A page that *appears* to work is harder to spot as broken than one that crashes.
 
 **Resolution.**
 
@@ -502,14 +530,11 @@ Three implementation details that turned out to matter:
 
 ## Engineering practices
 
-- **All Dart code is hand-written.** No automated UI builder, no drag-and-drop layout tool, no scaffolding generator beyond `flutter create` for the initial directory tree. Every widget tree, animation, service, and state machine in `lib/` was typed by hand against the Flutter widget catalogue.
-- **Daily/weekly commit cadence.** The git history shows iterative progress through eight phases — see the [Network graph](https://github.com/xms12138/CASA0015-Mobile-System/network) and the per-phase notes in [`PLAN.md`](PLAN.md).
+- **Daily/weekly commit cadence.** The git history shows iterative progress over the term — see the [Network graph](https://github.com/xms12138/CASA0015-Mobile-System/network) and the commit log itself for incremental progress.
 - **Code comments explain *why*, not *what*.** Comments are reserved for non-obvious constraints (the Firestore 500-op batch limit, the EMA `α` choice for compass, the `unawaited` cloud sync pattern) — variable names carry the *what*. See `lib/services/location_service.dart`, `lib/pages/trip_detail_page.dart` for examples.
 - **`flutter analyze` reports 0 issues** on every commit; lint is enforced via `analysis_options.yaml`.
 - **Secrets live outside source control.** `env.json`, `firebase_options.dart`, `google-services.json`, `local.properties` are all gitignored — the repository can be cloned and built on any developer's machine without inheriting upstream credentials.
-- **Two source-of-truth documents** accompany the code:
-  - [`PLAN.md`](PLAN.md) — phase-by-phase development plan with status flags, the canonical "what's done" record.
-  - [`DEVLOG.md`](DEVLOG.md) — incident-driven debugging notes in a phenomenon / root-cause / resolution format.
+- **A development journal accompanies the code.** [`DEVLOG.md`](DEVLOG.md) captures consequential debugging incidents in a *phenomenon / root cause / resolution* format. The deeper ones are expanded into the [Case studies](#case-studies) section above.
 
 ## Known limitations
 
@@ -540,12 +565,12 @@ The marking rubric (Mobile Application portion, 80% of the module) and where eac
 |---|:-:|---|
 | Use of compelling and appropriate widgets | 30% | See [Widget showcase](#widget-showcase) — custom animations (3-layer splash, AnimatedSwitcher photo card), gesture recognition (DraggableScrollableSheet, slider scrub, marker taps, pull-to-refresh), Material 3 SegmentedButton / NavigationBar / IconButton.filled, custom-rendered map marker via `PictureRecorder`. [Responsive layout](#responsive-design--cross-platform-readiness) adapts across phone screen sizes. |
 | User Interface and Experience | 20% | Material 3 with seed-driven `ColorScheme`, [design tokens](#design-system) (AppRadius / AppSpacing / AppDuration), system-driven dark mode, blocking permission UX, empty / error / loading states on async paths, splash-to-app `FadeTransition`. Cross-platform Flutter codebase ready for iOS port. |
-| Exploratory & storytelling nature | 20% | Designed around a [user persona](#user-persona--storyboard) and a six-beat storyboard ending at the replay screen. Trip replay surfaces photos in time with the cursor — the journey is *experienced*, not summarised. Real-world environment data (weather, AQI) is woven into the narrative timeline. |
+| Exploratory & storytelling nature | 20% | Designed around a [user persona](#user-persona--storyboard) and a multi-step storyboard ending at the replay screen. Trip replay surfaces photos in time with the cursor, so the trip plays back as a sequence rather than as a static map. Real-world environment data (weather, AQI) appears alongside the route on the timeline. |
 | Use of API or service | 15% | Three external services integrated: [OpenWeatherMap (weather + air pollution)](#external-services--apis) with parallel `Future.wait` and timeout, Firebase Auth + Firestore (anonymous, security-rule scoped, batch-chunked at 400 ops), Google Maps. API endpoints, polling cadence, failure isolation, and security choices are documented in [API design choices](#api-design-choices). |
-| Functionality solving a problem | 15% | Solves the real problem stated up top — records routes + photos + environment together; survives restarts via SQLite and device switches via Firestore. [Iteration log](#user-testing-scenario--iteration-log) shows feedback-driven refinements (filtering, replay clock fix, permission UX collapse). All Dart code is hand-written; commit history shows weekly progress; [`PLAN.md`](PLAN.md) and [`DEVLOG.md`](DEVLOG.md) document the development journey. |
+| Functionality solving a problem | 15% | Solves the real problem stated up top — records routes + photos + environment together; survives restarts via SQLite and device switches via Firestore. [Iteration log](#user-testing-scenario--iteration-log) shows feedback-driven refinements (filtering, replay clock fix, permission UX collapse). Commit history shows weekly progress; [`DEVLOG.md`](DEVLOG.md) documents the development journey incident by incident. |
 | **Presentation (separate 20%)** | 20% | Dedicated [GitHub Pages landing page](#landing-page), demo GIF in `docs/`, screenshots in this README, structured presentation of design → development → execution. |
 
-The full phase-by-phase plan is in [`PLAN.md`](PLAN.md); incident-driven debugging notes are in [`DEVLOG.md`](DEVLOG.md). Commit history shows iterative weekly progress through eight phases.
+Incident-driven debugging notes are in [`DEVLOG.md`](DEVLOG.md). The commit history shows iterative weekly progress.
 
 ## Author
 
