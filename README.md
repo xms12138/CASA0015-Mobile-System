@@ -111,15 +111,13 @@ The replay screen is what the rest of the product builds towards — recording c
 
 ## Demo & screenshots
 
-> _Place the demo GIF and screenshots in `docs/` before the final submission._
-
 | Splash | Home | Recording |
 |:--:|:--:|:--:|
-| ![splash](docs/screenshots/splash.jpg) | ![home](docs/screenshots/home.jpg) | ![record](docs/screenshots/record.jpg) |
+| <img src="docs/screenshots/splash.jpg" alt="splash" width="240"/> | <img src="docs/screenshots/home.jpg" alt="home" width="240"/> | <img src="docs/screenshots/record.jpg" alt="record" width="240"/> |
 
 | History | Trip detail (replay) | Dark mode |
 |:--:|:--:|:--:|
-| ![history](docs/screenshots/history.jpg) | ![replay](docs/screenshots/replay.jpg) | ![dark](docs/screenshots/dark.jpg) |
+| <img src="docs/screenshots/history.jpg" alt="history" width="240"/> | <img src="docs/screenshots/replay.jpg" alt="replay" width="240"/> | <img src="docs/screenshots/dark.jpg" alt="dark" width="240"/> |
 
 A short demo (under the 3-minute assessment cap):
 
