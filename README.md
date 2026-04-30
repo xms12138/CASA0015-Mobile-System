@@ -17,6 +17,29 @@ UCL CASA0015 — Mobile Systems & Interactions — Individual Coursework 2025/26
 
 ---
 
+## Contents
+
+1. [Problem](#problem)
+2. [Connected Environments theme](#connected-environments-theme)
+3. [User persona](#user-persona)
+4. [Demo & screenshots](#demo--screenshots)
+5. [Landing page](#landing-page)
+6. [Download](#download)
+7. [Features](#features)
+8. [Sensors](#sensors)
+9. [External services & APIs](#external-services--apis)
+10. [Widget showcase](#widget-showcase)
+11. [Architecture](#architecture)
+12. [Project structure](#project-structure)
+13. [Getting started](#getting-started)
+14. [Permissions](#permissions)
+15. [User testing & iteration](#user-testing--iteration)
+16. [Known limitations](#known-limitations)
+17. [Author](#author)
+18. [License](#license)
+
+---
+
 ## Problem
 
 Most travel apps fall into one of two camps:
@@ -52,11 +75,11 @@ The product is shaped by Mia's loop — *set out → record → capture → revi
 |:--:|:--:|:--:|
 | <img src="docs/screenshots/history.jpg" alt="history" width="240"/> | <img src="docs/screenshots/replay.jpg" alt="replay" width="240"/> | <img src="docs/screenshots/dark.jpg" alt="dark" width="240"/> |
 
-Demo video (under the 3-minute assessment cap):
+Demo video (2m 58s):
+> Full-resolution video: <https://youtu.be/-kdUUW9uAKY>
 
 [![Watch the demo on YouTube](docs/demo.gif)](https://youtu.be/-kdUUW9uAKY)
 
-> Full-resolution video: <https://youtu.be/-kdUUW9uAKY>
 
 ## Landing page
 
@@ -118,7 +141,7 @@ Each sensor is filtered before being persisted, per the course's smoothing requi
 
 ## Widget showcase
 
-Highlights of widgets used — for the *Use of compelling widgets* (30%) rubric area:
+Highlights of widgets used:
 
 - **Custom animations** — `AnimationController` driving simultaneous `FadeTransition` + `SlideTransition` + `ScaleTransition` on the splash; `AnimatedSwitcher` (300 ms fade + scale) for the replay photo card; `PageRouteBuilder` with `FadeTransition` for the splash → main handoff; `Curves.easeOutBack` for splash icon overshoot; pulsing recording dot.
 - **Gesture recognition** — `GestureDetector` on the Home Start CTA, `InkWell` on cards, `onTap` on map markers, `DraggableScrollableSheet` for the photo preview, slider scrubbing during replay, `RefreshIndicator` pull-to-refresh on History.
@@ -245,33 +268,10 @@ Real-device testing on a Huawei EML-AL00 surfaced several issues that drove desi
 
 ## Known limitations
 
-- **Android only.** iOS and web placeholders exist but are not live-tested. Bringing iOS to parity would need: Maps key in `AppDelegate.swift`, `NSLocation*` / `NSCamera*` in `Info.plist`, and re-running `flutterfire configure` against the iOS bundle ID. No platform-specific UI hacks were used in `lib/`.
 - **Cloud sync is one-way.** Trips upload to Firestore but the UI never reads them back. By design — Spark plan does not include Firebase Storage, so photos stay on the device.
 - **Trip titles are timestamps**, not place names (no reverse geocoding).
 - **History thumbnails not implemented** — cards show a route icon rather than a static-map preview.
 - **No in-app dark-mode toggle** — theme is OS-driven.
-
-## Roadmap
-
-If given more time, in priority order:
-
-1. Reverse geocode start/end into "Highbury → Camden" titles.
-2. Static-map / first-photo thumbnails on History cards.
-3. Two-way Firestore sync so a re-installed device pulls existing trips.
-4. Hero transition from History card → Trip Detail map.
-5. Background recording with a foreground service notification.
-
-## Course context
-
-CASA0015 individual coursework, 100% of the module mark. Mapping to the marking rubric (Mobile Application, 80%):
-
-- **Widgets / interaction (30%)** — Widget showcase above; custom animations, gesture-driven sheets and sliders, Material 3 components, custom-rendered map marker.
-- **UI / UX (20%)** — Material 3 with seed-driven `ColorScheme`, design tokens, system-driven dark mode, blocking permission UX, splash transition.
-- **Storytelling (20%)** — Designed around Mia's persona; trip replay surfaces photos in time with a moving cursor; environment data appears alongside the route.
-- **API / service (15%)** — OpenWeatherMap (parallel weather + air pollution), Firebase Auth + Firestore (anonymous, security-rule scoped, batch-chunked), Google Maps. See [API design choices](#external-services--apis).
-- **Functionality (15%)** — Solves the Problem statement above; persists across restarts (SQLite) and devices (Firestore); iteration log shows feedback-driven refinements; commit history shows weekly progress.
-
-Presentation portion (separate 20%) is covered by the GitHub Pages [landing page](#landing-page), the demo GIF / video, and the slide deck in `docs/`.
 
 ## Author
 
