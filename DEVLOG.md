@@ -239,3 +239,46 @@ Phase 5 接入 SQLite 时只改了 History / Detail / Record 三页，Home 页
 留一个"看起来能用"的页面最后会被当成 bug 反馈回来。
 
 ---
+
+## 2026-04-29 — 隔天再开 app 照片全打不开（marker 在但图空）
+
+**现象：**
+真机录一条 trip 拍 1-2 张照，当场进 History → Trip Detail 一切正常。
+**关闭 app 过一晚再打开**，进同一条 trip：地图 polyline / start-end pin /
+photo marker 位置全部还在，但点 marker 弹出的预览 sheet **完全空白**，
+回放游标进入照片时间窗时浮现的缩略卡也是空白。`flutter analyze` 没报错，
+也没崩溃日志，UI 静默失败。
+
+**根因：**
+`image_picker` 默认把照片落到 app 的 **cache / temporary** 目录
+（Android 上类似 `/data/data/com.example.app/cache/image_picker_xxx.jpg`）。
+系统会在 app 关闭后或周期维护时清理这块目录。`CameraService.takePhoto()`
+当时直接 `return image?.path`，把临时路径作为绝对路径写进 SQLite。
+照片文件被系统清掉之后，DB 里的字符串还在，`File(path).exists()` 变 false，
+但 `Image.file(File(path))` 的三个调用点（`trip_detail_page.dart:752 / 893
+/ 1264`）**都没传 errorBuilder**，Flutter 默认行为是渲染零尺寸 + 把异常吞到
+`FlutterError.onError`，不会冒到 console，更不会影响布局 —— 所以肉眼看是
+"空白"，调试时极易被当成 layout 问题去查。
+
+**解决：**
+1. **拍完立即 copy 到永久目录**：`CameraService` 加 `_persist(XFile)` 把
+   image_picker 给的临时文件 `File.copy()` 到
+   `getApplicationDocumentsDirectory()/photos/{uuid}.jpg`。`takePhoto` 和
+   `pickFromGallery` 都走这条路径，对外签名（`Future<String?>`）不变。
+   pubspec 已有 `path_provider` / `path` / `uuid`，无需新增依赖。
+2. **UI 兜底**：`trip_detail_page.dart` 三处 `Image.file` / `Image.network`
+   全部加 `errorBuilder`，文件末尾抽出 `_missingPhotoPlaceholder(context,
+   {required bool large})` 渲染 `surfaceContainerHighest` 底色 +
+   `Icons.broken_image_outlined` + "Photo unavailable" 文案（large 模式才
+   显示文案）。这样旧 trip 已经丢掉的照片不再静默空白。
+3. **不做迁移**：已经丢的图找不回来，没必要写脚本清死路径 —— 万一某些
+   cache 还没被清的死路径用户后续重启又能复活，留着反而是好事。Demo
+   场景下用户可以删旧 trip 重录。
+
+**教训：** `image_picker` 返回的 path **永远不要**直接写库。Android 的
+cache 目录寿命由系统决定，跟 app 生命周期无关。任何"用户产出 + 长期持有"
+的二进制资产都必须在产生当下就落到 `getApplicationDocumentsDirectory()`
+或 `getApplicationSupportDirectory()`。同时所有 `Image.file` 调用都该有
+errorBuilder —— 默认静默失败这一点对调试和 UX 都极不友好。
+
+---

@@ -748,10 +748,17 @@ class _PhotoPreviewSheet extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: kIsWeb
-                        ? Image.network(photo.localPath, fit: BoxFit.contain)
+                        ? Image.network(
+                            photo.localPath,
+                            fit: BoxFit.contain,
+                            errorBuilder: (c, _, _) =>
+                                _missingPhotoPlaceholder(c, large: true),
+                          )
                         : Image.file(
                             File(photo.localPath),
                             fit: BoxFit.contain,
+                            errorBuilder: (c, _, _) =>
+                                _missingPhotoPlaceholder(c, large: true),
                           ),
                   ),
                 ),
@@ -889,8 +896,18 @@ class _ClusterThumb extends StatelessWidget {
               width: 140,
               height: 140,
               child: kIsWeb
-                  ? Image.network(photo.localPath, fit: BoxFit.cover)
-                  : Image.file(File(photo.localPath), fit: BoxFit.cover),
+                  ? Image.network(
+                      photo.localPath,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, _, _) =>
+                          _missingPhotoPlaceholder(c, large: false),
+                    )
+                  : Image.file(
+                      File(photo.localPath),
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, _, _) =>
+                          _missingPhotoPlaceholder(c, large: false),
+                    ),
             ),
             Positioned(
               left: 0,
@@ -1260,8 +1277,18 @@ class _ReplayPhotoCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               kIsWeb
-                  ? Image.network(photo.localPath, fit: BoxFit.cover)
-                  : Image.file(File(photo.localPath), fit: BoxFit.cover),
+                  ? Image.network(
+                      photo.localPath,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, _, _) =>
+                          _missingPhotoPlaceholder(c, large: false),
+                    )
+                  : Image.file(
+                      File(photo.localPath),
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, _, _) =>
+                          _missingPhotoPlaceholder(c, large: false),
+                    ),
               Positioned(
                 left: 0,
                 right: 0,
@@ -1306,4 +1333,34 @@ class _ReplayPhotoCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// Renders a graceful placeholder when an old photo's underlying file is gone
+// (e.g. trips recorded before the camera-service persistence fix, where
+// image_picker's temp path was wiped by Android cache cleanup).
+Widget _missingPhotoPlaceholder(BuildContext context, {required bool large}) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return Container(
+    color: colorScheme.surfaceContainerHighest,
+    alignment: Alignment.center,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.broken_image_outlined,
+          size: large ? 64 : 32,
+          color: colorScheme.onSurfaceVariant,
+        ),
+        if (large) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Photo unavailable',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 }

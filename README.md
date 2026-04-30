@@ -115,13 +115,17 @@ The replay screen is what the rest of the product builds towards — recording c
 
 | Splash | Home | Recording |
 |:--:|:--:|:--:|
-| ![splash](docs/screenshots/splash.png) | ![home](docs/screenshots/home.png) | ![record](docs/screenshots/record.png) |
+| ![splash](docs/screenshots/splash.jpg) | ![home](docs/screenshots/home.jpg) | ![record](docs/screenshots/record.jpg) |
 
 | History | Trip detail (replay) | Dark mode |
 |:--:|:--:|:--:|
-| ![history](docs/screenshots/history.png) | ![replay](docs/screenshots/replay.png) | ![dark](docs/screenshots/dark.png) |
+| ![history](docs/screenshots/history.jpg) | ![replay](docs/screenshots/replay.jpg) | ![dark](docs/screenshots/dark.jpg) |
 
-A short demo GIF (≤ 3 minutes, per assessment guidelines) is at `docs/demo.gif`.
+A short demo (under the 3-minute assessment cap):
+
+[![Watch the demo on YouTube](docs/demo.gif)](https://youtu.be/-kdUUW9uAKY)
+
+> 📺 **Full-resolution video**: <https://youtu.be/-kdUUW9uAKY> — the same recording is embedded in the slide deck (slide 12).
 
 ## Landing page
 
@@ -574,8 +578,7 @@ Incident-driven debugging notes are in [`DEVLOG.md`](DEVLOG.md). The commit hist
 
 ## Author
 
-**Hanzhe Xu** ([@xms12138](https://github.com/xms12138)) — UCL CASA, 2025/26.
+**Zihang He** ([@xms12138](https://github.com/xms12138)) — UCL CASA, 2025/26.
 
 ## License
-
-[MIT](LICENSE) © 2026 Hanzhe Xu
+[MIT](LICENSE) © 2026 Zihang He

@@ -56,3 +56,8 @@ env.json
 android/app/google-services.json
 lib/firebase_options.dart
 docs/build_*.py
+
+# Source demo video — 97MB, exceeds GitHub's 100MB single-file limit
+# (push would be rejected). The same recording lives on YouTube
+# (https://youtu.be/-kdUUW9uAKY) and as a compressed GIF in docs/demo.gif.
+docs/demo.mp4

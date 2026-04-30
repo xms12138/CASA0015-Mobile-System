@@ -133,7 +133,7 @@
         <div class="relative">
           <div class="absolute -inset-6 bg-brand-500/20 blur-3xl rounded-full"></div>
           <img
-            src="screenshots/replay.png"
+            src="screenshots/replay.jpg"
             alt="TravelTrace replay screen with photo card"
             class="relative w-72 md:w-80 lg:w-96 rounded-[2.5rem] glow"
             onerror="this.src='https://placehold.co/360x780/18181b/2E7D32?text=Replay+screen';this.classList.add('p-2','bg-zinc-900','border','border-zinc-800')"
@@ -248,7 +248,7 @@
         <!-- Step 1 -->
         <div class="relative">
           <div class="aspect-[9/16] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 mb-4">
-            <img src="screenshots/record.png" alt="Recording" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=01+Start'" />
+            <img src="screenshots/record.jpg" alt="Recording" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=01+Start'" />
           </div>
           <div class="flex items-baseline gap-3">
             <span class="text-3xl font-bold text-brand-500">01</span>
@@ -260,7 +260,7 @@
         <!-- Step 2 -->
         <div class="relative">
           <div class="aspect-[9/16] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 mb-4">
-            <img src="screenshots/record.png" alt="Capturing photos" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=02+Capture'" />
+            <img src="screenshots/record.jpg" alt="Capturing photos" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=02+Capture'" />
           </div>
           <div class="flex items-baseline gap-3">
             <span class="text-3xl font-bold text-brand-500">02</span>
@@ -272,7 +272,7 @@
         <!-- Step 3 -->
         <div class="relative">
           <div class="aspect-[9/16] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 mb-4">
-            <img src="screenshots/history.png" alt="History" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=03+Save'" />
+            <img src="screenshots/history.jpg" alt="History" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=03+Save'" />
           </div>
           <div class="flex items-baseline gap-3">
             <span class="text-3xl font-bold text-brand-500">03</span>
@@ -284,7 +284,7 @@
         <!-- Step 4 -->
         <div class="relative">
           <div class="aspect-[9/16] rounded-2xl overflow-hidden border border-brand-500/40 bg-zinc-900 mb-4">
-            <img src="screenshots/replay.png" alt="Replay" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=04+Replay'" />
+            <img src="screenshots/replay.jpg" alt="Replay" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/360x640/18181b/2E7D32?text=04+Replay'" />
           </div>
           <div class="flex items-baseline gap-3">
             <span class="text-3xl font-bold text-brand-500">04</span>
@@ -304,16 +304,29 @@
     <div class="max-w-5xl mx-auto text-center">
       <span class="inline-block px-3 py-1 text-xs uppercase tracking-widest text-zinc-500 border border-zinc-800 rounded-full mb-6">In action</span>
       <h2 class="text-3xl md:text-5xl font-bold mb-4">See a journey replayed</h2>
-      <p class="text-zinc-400 mb-12 max-w-2xl mx-auto">Recorded on a Huawei EML-AL00 device.</p>
+      <p class="text-zinc-400 mb-12 max-w-2xl mx-auto">Recorded on a Huawei EML-AL00 device. YouTube Short — vertical playback.</p>
 
-      <div class="relative rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl shadow-brand-500/10">
-        <img
-          src="demo.gif"
-          alt="TravelTrace demo"
-          class="w-full"
-          onerror="this.src='https://placehold.co/1280x720/18181b/2E7D32?text=demo.gif+placeholder'"
-        />
+      <!-- YouTube Short embed (9:16). Wrapped in a phone-sized container so
+           the vertical video doesn't blow up to 2275px tall on wide screens. -->
+      <div class="mx-auto rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl shadow-brand-500/10" style="max-width: 360px;">
+        <div class="relative" style="padding-bottom: 177.78%;">
+          <iframe
+            class="absolute top-0 left-0 w-full h-full"
+            src="https://www.youtube.com/embed/-kdUUW9uAKY"
+            title="TravelTrace demo"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen></iframe>
+        </div>
       </div>
+
+      <p class="text-zinc-500 text-sm mt-6">
+        Prefer a quick inline preview?
+        <a href="demo.gif" class="text-brand-400 hover:text-brand-50 underline underline-offset-4">View the GIF</a>
+        ·
+        <a href="https://youtu.be/-kdUUW9uAKY" class="text-brand-400 hover:text-brand-50 underline underline-offset-4">Open on YouTube</a>
+      </p>
     </div>
   </section>
 
