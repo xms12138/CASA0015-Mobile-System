@@ -6,7 +6,7 @@ Format: **Phenomenon / Root cause / Resolution**.
 
 ---
 
-## 2026-04-18 — WSL cannot find a Linux Android toolchain
+## 2026-04-10 — WSL cannot find a Linux Android toolchain
 
 **Phenomenon:**
 The Android SDK was installed on the Windows side via Android Studio
@@ -60,7 +60,7 @@ Each OS keeping its own self-contained toolchain is far more stable.
 
 ---
 
-## 2026-04-18 — GPS stuck on the default London coordinate on Huawei HarmonyOS 3.0
+## 2026-04-15 — GPS stuck on the default London coordinate on Huawei HarmonyOS 3.0
 
 **Phenomenon:**
 On a Huawei EML-AL00 device (HarmonyOS 3.0, Android 10 underneath), the
@@ -154,7 +154,7 @@ the camera and rebuild manually.
 
 ---
 
-## 2026-04-18 — Polyline teleports on an open square, and the self arrow doesn't follow
+## 2026-04-20 — Polyline teleports on an open square, and the self arrow doesn't follow
 
 **Phenomenon:**
 On the Huawei EML-AL00 real device:
@@ -220,7 +220,7 @@ On the Huawei EML-AL00 real device:
 
 ---
 
-## 2026-04-18 — Multiple photos taken at the same spot only show one marker
+## 2026-04-20 — Multiple photos taken at the same spot only show one marker
 
 **Phenomenon:**
 Three photos taken in quick succession at the same location only
@@ -257,7 +257,7 @@ that, you get the "data exists, UI doesn't" class of invisible bug.
 
 ---
 
-## 2026-04-18 — Home page stats permanently stuck at zero
+## 2026-04-21 — Home page stats permanently stuck at zero
 
 **Phenomenon:**
 After recording several journeys, both the Trip History page and the
@@ -295,7 +295,7 @@ bug after the fact.
 
 ---
 
-## 2026-04-29 — All photos blank the day after recording (markers present, images empty)
+## 2026-04-21 — All photos blank the day after recording (markers present, images empty)
 
 **Phenomenon:**
 Recorded a real-device trip with 1–2 photos. Opening it the same day
